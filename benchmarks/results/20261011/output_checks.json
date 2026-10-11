@@ -1,0 +1,90 @@
+[
+  {
+    "case": "scan_1mb",
+    "same_output": true
+  },
+  {
+    "case": "literal_miss",
+    "same_output": true
+  },
+  {
+    "case": "phone_lines",
+    "same_output": true
+  },
+  {
+    "case": "large_pattern",
+    "same_output": true
+  },
+  {
+    "case": "find_digits",
+    "same_output": true
+  },
+  {
+    "case": "find_emails",
+    "same_output": true
+  },
+  {
+    "case": "find_words",
+    "same_output": true
+  },
+  {
+    "case": "lazy_search",
+    "same_output": true
+  },
+  {
+    "case": "anchored_short",
+    "same_output": true
+  },
+  {
+    "case": "split",
+    "same_output": true
+  },
+  {
+    "case": "replace",
+    "same_output": true
+  },
+  {
+    "case": "unicode_class",
+    "same_output": true
+  },
+  {
+    "case": "dense_short",
+    "same_output": true
+  },
+  {
+    "case": "dense_long",
+    "same_output": true
+  },
+  {
+    "case": "no_capture_short",
+    "same_output": true
+  },
+  {
+    "case": "no_capture_long",
+    "same_output": true
+  },
+  {
+    "case": "many_captures",
+    "same_output": true
+  },
+  {
+    "case": "nullable",
+    "same_output": true
+  },
+  {
+    "case": "delayed_capture",
+    "same_output": true
+  },
+  {
+    "case": "cold_email",
+    "same_output": true
+  },
+  {
+    "case": "cold_large",
+    "same_output": true
+  },
+  {
+    "case": "slot_stress",
+    "same_output": true
+  }
+]

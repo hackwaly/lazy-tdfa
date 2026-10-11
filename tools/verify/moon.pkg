@@ -1,0 +1,7 @@
+import {
+  "moonbitlang/core/builtin",
+  "hackwaly/lazy-tdfa" @string,
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")

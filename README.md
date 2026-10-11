@@ -6,6 +6,19 @@ This repository retains the upstream Apache-2.0 license and copyright notices. I
 
 Import `hackwaly/lazy-tdfa` with an alias such as `@regex`. Construct patterns with `@regex.Regex(pattern)` or `@regex.Regex::unsafe_from_string(pattern)`; use execute, find, split and replace_by as in core. Regex literals are compiler integrations and are not promised for this external package.
 
+```moonbit
+// In a consumer's moon.pkg:
+// import { "hackwaly/lazy-tdfa" @regex }
+test {
+  let regex = @regex.Regex::unsafe_from_string("([a-z]+)@([a-z]+)\\.com")
+  guard regex.execute("alice@example.com") is Some(match_) else {
+    fail("Expected match")
+  }
+  inspect(match_.content().to_string(), content="alice@example.com")
+  inspect(match_.group(1).map(s => s.to_string()), content="Some(\"alice\")")
+}
+```
+
 ```sh
 moon check
 moon info
@@ -30,3 +43,11 @@ core baseline used for the extraction, rather than adopting the different
 nullable capture behavior observed in bobzhang/tdfa.
 
 See [engine design](internal/engine/README.md) for invariants and test history.
+
+## Performance evidence
+
+See [the fresh four-way benchmark](benchmarks/RESULTS.md) and the raw samples
+in benchmarks/results/20261011. Run `moon run benchmarks --target native --release -- dense_long hot`
+for one workload, or use scripts/compare.py to
+interleave comparison binaries. Do not treat the stress-memory ratio or
+an equal-weight aggregate as a guarantee for every pattern.

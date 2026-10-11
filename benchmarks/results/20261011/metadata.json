@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-11",
+  "cpu": "Apple M2 Max",
+  "ram_bytes": 68719476736,
+  "compiler": "v0.10.14+122871fce-dev",
+  "compiler_path": "/Users/wenyuxiang/Workspace/ideas.no_index/_build/install/default/bin/moonc",
+  "main": "398e080a313ec0e94ba9964d5b1c054321c44516",
+  "before": "b7625ab222e59307f225350b13c76540f3447a11",
+  "claude": "48302f3272c93f2a6aa9a67c55eff249472e6bbc",
+  "after": "9dce342ee4cececd7861c458434a8d290fe8517f",
+  "toolchain_stdlib": "main 398e080a rebuilt with same moonc; standalone uses MOON_TOOLCHAIN_ROOT=/private/tmp/lazy-tdfa-toolchain",
+  "benchmark": "same public-API driver, warmup5 + doubling to100ms/max1048576 +3samples x3processes",
+  "ordering": "all four variants and targets interleaved in a fresh sequential run, seed20261012",
+  "node": "v24.18.1",
+  "moonrun": "0.1.20260920(914d7da)",
+  "phases": {
+    "hot": "warmed Regex reused",
+    "cold": "new Regex plus first execute, already warmed process",
+    "parse": "Regex parsing only; engine construction remains lazy"
+  },
+  "core_optimized": "70085c860b37a1f3d1f80e7b0d9f90ae7b1ab306"
+}
