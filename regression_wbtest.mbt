@@ -29,9 +29,10 @@ let profile : @re.Profile = Profile(
 )
 
 ///|
-// Two independent rolling digests retain the pre-migration capture results
-// without retaining the derivative implementation as a test dependency.
-// Baseline: cf510ca6, before string.Regex switched to the tagged engine.
+// Two independent rolling digests record capture results without retaining
+// the derivative implementation as a test dependency. Non-nullable entries
+// retain the cf510ca6 baseline from before the core engine migration;
+// nullable entries use the deliberate Go-priority semantics change.
 priv struct CaptureDigest {
   mut first : UInt
   mut second : UInt
@@ -60,7 +61,7 @@ fn CaptureDigest::record(self : CaptureDigest, group : (Int, Int)??) -> Unit {
 }
 
 ///|
-test "ordered captures preserve pre-migration results" {
+test "ordered captures regression with Go nullable priority" {
   let a = @re.char(@re.RecharSet::char('a'))
   let b = @re.char(@re.RecharSet::char('b'))
   let empty_a = @re.quantifier(a, { min: 0, max: None, mode: Greedy, })
@@ -192,7 +193,7 @@ test "ordered captures preserve pre-migration results" {
       #|  (1276063025, 3618297093, 155080),
       #|  (896180141, 1116027673, 89048),
       #|  (4021007145, 724635529, 83932),
-      #|  (3890385001, 4146312825, 108556),
+      #|  (3039482725, 215773257, 108556),
       #|  (3748631573, 1004529593, 77540),
       #|  (4021007145, 724635529, 83932),
       #|  (3830010401, 1911744321, 130456),
@@ -201,14 +202,14 @@ test "ordered captures preserve pre-migration results" {
       #|  (2708354003, 3280872529, 58564),
       #|  (847099591, 4098826977, 51508),
       #|  (2983166329, 3908228737, 70816),
-      #|  (3734337573, 3846490279, 62032),
+      #|  (151054465, 2145916029, 62032),
       #|  (3207698499, 3831905745, 73540),
       #|  (676980729, 2227274393, 46524),
       #|  (2184939917, 332691145, 57484),
       #|  (3575803313, 2304020749, 32380),
       #|  (151054465, 2145916029, 62032),
       #|  (2895867133, 293104505, 37928),
-      #|  (2003576641, 1485344241, 62032),
+      #|  (151054465, 2145916029, 62032),
       #|  (676980729, 2227274393, 46524),
       #|  (4102029227, 761952833, 77540),
       #|  (151054465, 2145916029, 62032),
@@ -407,7 +408,7 @@ test "ordered captures preserve pre-migration results" {
 }
 
 ///|
-test "UTF-16 lowering preserves pre-migration results" {
+test "UTF-16 lowering regression with Go nullable priority" {
   let patterns = [
     ".", "(.)*", "(.+?)(.*)", "(😀|.)+", "[\u{10000}-\u{10FFFF}]+", "[\u{D7FF}-\u{E000}]",
     "[^a]*", "\\b(.)*\\b", "\\B", "^(.?)*$", "(a|(😀)?)*", "((a?)*)*", "(?<x>.*?)(.*)",
@@ -452,9 +453,9 @@ test "UTF-16 lowering preserves pre-migration results" {
       #|  (337494008, 449931258, 290),
       #|  (75337786, 1756142456, 272),
       #|  (1460960977, 1382813155, 284),
-      #|  (2987372416, 1568983398, 264),
-      #|  (737407392, 675884760, 360),
-      #|  (2292416985, 2806099525, 406),
+      #|  (1921312402, 1067611740, 264),
+      #|  (3390973657, 2237411319, 360),
+      #|  (1277762060, 1507581940, 406),
       #|  (3629061516, 2234483438, 406),
       #|]
     ),

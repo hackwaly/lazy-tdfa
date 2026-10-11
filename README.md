@@ -48,6 +48,8 @@ The generated tests in nullable_go_test.mbt compare complete matches and
 all capture endpoints against Go, including mandatory counts, bounded copies,
 nested loops, suffix retries and UTF-16 offsets. Regenerate with
 `go run scripts/nullable_oracle.go > nullable_go_test.mbt`, then `moon fmt`.
+See [semantic change and validation](docs/go-nullable-priority.md) for the
+reference cases and the intentionally updated regression snapshots.
 
 See [engine design](internal/engine/README.md) for invariants and test history.
 

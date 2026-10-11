@@ -130,18 +130,29 @@ test "flat kernels keep the first history for duplicate targets" {
 test "cache flush preserves Go nullable capture priority" {
   let a = char(RecharSet::char('a'))
   let optional = quantifier(a, { min: 0, max: Some(1), mode: Greedy, })
-  let pattern = seq([
-    start_of_input,
-    quantifier(capture(optional), { min: 0, max: None, mode: Greedy, }),
-    char(RecharSet::char('b')),
-    end_of_input,
-  ])
-  let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
-  for n in 0..<12 {
-    guard re.execute("a".repeat(n) + "b", 0) is Some(result) else {
-      fail("missing match")
+  let modes : Array[QuantifierMode] = [Greedy, NonGreedy]
+  for min in 0..<4 {
+    for mode in modes {
+      let pattern = seq([
+        start_of_input,
+        quantifier(capture(optional), { min, max: None, mode, }),
+        char(RecharSet::char('b')),
+        end_of_input,
+      ])
+      let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
+      for n in 0..<12 {
+        guard re.execute("a".repeat(n) + "b", 0) is Some(result) else {
+          fail("missing match")
+        }
+        let expected = if n == 0 && min == 0 && mode is NonGreedy {
+          None
+        } else if n > 0 && n >= min {
+          Some((n - 1, n))
+        } else {
+          Some((n, n))
+        }
+        @test.assert_eq(result.group(1), expected)
+      }
     }
-    let span = if n == 0 { (0, 0) } else { (n - 1, n) }
-    @test.assert_eq(result.group(1), Some(span))
   }
 }

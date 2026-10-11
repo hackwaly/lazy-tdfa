@@ -78,9 +78,14 @@ test "regex retains an accepted candidate until higher priorities fail" {
 }
 
 ///|
-test "regex greedy nullable loops preserve the final empty capture" {
+test "regex greedy nullable loops preserve the Go capture priority" {
   let re = @regex.Regex("(a*)*")
   guard re.execute("aa") is Some(m) else { fail("missing match") }
   inspect(m.content(), content="aa")
-  debug_inspect(m.group(1), content="Some(<StringView: \"\">)")
+  debug_inspect(
+    m.group(1),
+    content=(
+      #|Some(<StringView: "aa">)
+    ),
+  )
 }
