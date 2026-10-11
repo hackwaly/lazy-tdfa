@@ -69,26 +69,6 @@ fn compile_with_cache_budget(
       Rep(q, body) => q.min == 0 || nullable(body)
     }
   }
-  // Project only zero-width paths. A greedy nullable repetition records one
-  // final empty iteration; a distinct acyclic projection preserves its tags
-  // without revisiting already-deduplicated PCs from the consuming iteration.
-  fn zero(pat : TaggedPattern) -> TaggedPattern {
-    match pat {
-      Chr(_) => Alt([])
-      Seq(parts) => Seq(parts.map(zero))
-      Alt(parts) => Alt(parts.map(zero))
-      Cap(group, body) => Cap(group, zero(body))
-      Assert(a) => Assert(a)
-      Rep(q, body) => {
-        let count = if q.mode is NonGreedy || !nullable(body) {
-          q.min
-        } else {
-          q.max.unwrap_or(q.min + 1)
-        }
-        Seq(Array::make(count, zero(body)))
-      }
-    }
-  }
   fn build(pat : TaggedPattern, next : Int) -> Int {
     match pat {
       Chr(chars) => add(Chr(symbols.map_set(chars), next))
@@ -112,48 +92,34 @@ fn compile_with_cache_budget(
           None => {
             let repeat_entry = add(Split([]))
             let inner = build(body, repeat_entry)
-            // Repetition's consuming continuation excludes zero-width full
-            // iterations, so an empty match cannot loop indefinitely.
-            // Clone only the pre-consumption epsilon graph; after the first
-            // character, reuse the original body graph and repeat backedge.
-            let copied : @hashmap.HashMap[Int, Int] = HashMap([])
-            fn nonempty(pc : Int) -> Int {
-              if pc == repeat_entry {
-                return add(Split([]))
-              }
-              match copied.get(pc) {
-                Some(existing) => existing
-                None => {
-                  let dest = add(Split([]))
-                  copied.set(pc, dest)
-                  nodes[dest] = match nodes[pc] {
-                    Chr(chars, next) => Chr(chars, next)
-                    Split(alts) => Split(alts.map(nonempty))
-                    Tag(tag, next) => Tag(tag, nonempty(next))
-                    Assert(a, next) => Assert(a, nonempty(next))
-                    Accept => Split([])
-                  }
-                  dest
-                }
-              }
-            }
-            let consuming = if nullable(body) { nonempty(inner) } else { inner }
-            let exit = if q.mode is Greedy && nullable(body) {
-              let empty_iteration = build(zero(body), next)
-              add(Split([empty_iteration, next]))
+            let choices = if q.mode is Greedy {
+              [inner, next]
             } else {
-              next
+              [next, inner]
             }
-            nodes[repeat_entry] = Split(
-              if q.mode is Greedy {
-                [consuming, exit]
+            nodes[repeat_entry] = Split(choices)
+            // All loop iterations share the same body PCs. Ordered closure
+            // keeps their first arrival at each input position, bounding empty
+            // cycles without adding a separate final empty capture.
+            if q.min == 0 {
+              // A nullable star is (body+)? with matching modes on both
+              // choices. Its initial choice must be distinct from the loop
+              // choice, so the first empty iteration can reach the suffix.
+              entry = if nullable(body) {
+                add(Split(choices))
               } else {
-                [exit, consuming]
-              },
-            )
-            entry = repeat_entry
+                repeat_entry
+              }
+            } else {
+              entry = inner
+              // The final mandatory copy is the shared loop body. Earlier
+              // mandatory copies have distinct PCs, even for empty matches.
+              for _ in 1..<q.min {
+                entry = build(body, entry)
+              }
+            }
           }
-          Some(max) =>
+          Some(max) => {
             for _ in 0..<(max - q.min) {
               let inner = build(body, entry)
               entry = add(
@@ -166,9 +132,10 @@ fn compile_with_cache_budget(
                 ),
               )
             }
-        }
-        for _ in 0..<q.min {
-          entry = build(body, entry)
+            for _ in 0..<q.min {
+              entry = build(body, entry)
+            }
+          }
         }
         entry
       }

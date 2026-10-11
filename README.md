@@ -1,6 +1,6 @@
 # lazy-tdfa
 
-Standalone MoonBit regex engine extracted from the core lazy tagged DFA implementation at b7625ab222e59307f225350b13c76540f3447a11. Its public Regex API follows core string/regex, with leftmost-first matching and preserved capture semantics, including the final empty iteration of greedy nullable repetitions.
+Standalone MoonBit regex engine extracted from the core lazy tagged DFA implementation at b7625ab222e59307f225350b13c76540f3447a11. Its public Regex API follows core string/regex, with leftmost-first matching and Go's ordered-automaton priority for nullable repetitions.
 
 This repository retains the upstream Apache-2.0 license and copyright notices. It contains the tagged engine, parser and public API, without the derivative engine or the rest of core.
 
@@ -37,10 +37,17 @@ values preserved so the current match can continue. The budget is internal,
 not a promise about whole-process RSS; transient allocations and one oversized
 state are not bounded by it.
 
-Greedy nullable repeats still retain their final empty capture: `^(a?)*b$`
-on `aab` captures the empty string in group 1. This deliberately preserves the
-core baseline used for the extraction, rather than adopting the different
-nullable capture behavior observed in bobzhang/tdfa.
+Nullable repetitions follow Go's `regexp` priority: `^(a?)*b$` on `aab`
+captures `a` at `[1,2)` in group 1. On `b`, the same greedy pattern captures
+an empty string at `[0,0)`; a lazy star can skip the group altogether.
+Finite copies remain distinct, so `^(a?){0,3}b$` on `aab` captures the
+final empty iteration. This is a deliberate capture-semantics change from
+the core version used for extraction; it does not adopt Go's regex syntax.
+
+The generated tests in nullable_go_test.mbt compare complete matches and
+all capture endpoints against Go, including mandatory counts, bounded copies,
+nested loops, suffix retries and UTF-16 offsets. Regenerate with
+`go run scripts/nullable_oracle.go > nullable_go_test.mbt`, then `moon fmt`.
 
 See [engine design](internal/engine/README.md) for invariants and test history.
 

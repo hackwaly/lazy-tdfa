@@ -127,7 +127,7 @@ test "flat kernels keep the first history for duplicate targets" {
 }
 
 ///|
-test "cache flush preserves greedy nullable final empty captures" {
+test "cache flush preserves Go nullable capture priority" {
   let a = char(RecharSet::char('a'))
   let optional = quantifier(a, { min: 0, max: Some(1), mode: Greedy, })
   let pattern = seq([
@@ -141,6 +141,7 @@ test "cache flush preserves greedy nullable final empty captures" {
     guard re.execute("a".repeat(n) + "b", 0) is Some(result) else {
       fail("missing match")
     }
-    @test.assert_eq(result.group(1), Some((n, n)))
+    let span = if n == 0 { (0, 0) } else { (n - 1, n) }
+    @test.assert_eq(result.group(1), Some(span))
   }
 }

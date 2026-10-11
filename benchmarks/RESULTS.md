@@ -1,5 +1,10 @@
 # Optimized lazy-tdfa: 2026-10-11 benchmark
 
+These measurements describe commit 9dce342, before the later switch to Go's
+nullable repetition priority. The old capture compatibility statements below
+apply to that measured commit. They do not describe current nullable captures
+or establish performance numbers for the subsequent semantic change.
+
 This compares the optimized standalone engine with its pre-optimization core engine, current core main, and bobzhang/tdfa. All four implementations run the same public-API driver on the same machine, interleaved sequentially in three independent rounds. These are freshly measured results, not ratios copied from an earlier run.
 
 - main: `398e080a313ec0e94ba9964d5b1c054321c44516`

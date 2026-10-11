@@ -30,9 +30,12 @@ Ordered epsilon closure retains the first visit to each node. When it reaches
 an accepted candidate, lower-priority threads are discarded; higher-priority
 consuming threads remain so greedy continuations can supersede that candidate.
 
-Unbounded nullable repetitions use a consuming continuation that excludes
-complete empty iterations. Greedy exits also contain a separate acyclic empty
-projection so final empty captures are preserved without epsilon cycles.
+Unbounded repetitions share one body graph across loop iterations. A nullable
+star uses a plus inside an optional choice, with the written greediness on
+both choices, following Go's ordered-automaton priority. Ordered closure keeps
+the first arrival at each PC and input position, suppressing empty cycles
+without a separate final empty-capture projection. Earlier mandatory copies
+and finite optional copies have distinct PCs and can still capture empty text.
 
 Tag histories contain register identities, not input offsets. All tags written
 on one transition refer to the same cursor, so they share one register. That
@@ -66,8 +69,11 @@ The public API runs the inherited core regex tests. Before removal, 217 fixed
 and generated patterns were checked against the derivative engine over all
 short inputs and search offsets, including capture endpoints, nullable
 repetitions, assertions and repeated cache use. Two independent rolling
-digests per pattern preserve those verified results as regression baselines.
-Unicode lowering on sliced StringViews has a separate historical baseline.
+digests per pattern record those results as regression baselines; nullable
+entries are updated for the deliberate switch to Go's capture priority.
+Unicode lowering on sliced StringViews has a separate regression baseline.
+nullable_go_test.mbt is generated from Go's independent regexp implementation
+and checks complete match and capture endpoints, including UTF-16 offsets.
 Direct engine tests check lazy cache reuse and large live-register counts.
 
 Use `Regex(pattern)` for this standalone package. A compiler regex literal
