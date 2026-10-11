@@ -1,0 +1,14 @@
+import {
+  "moonbitlang/core/builtin",
+  "hackwaly/lazy-tdfa/internal/engine" @re,
+  "hackwaly/lazy-tdfa/internal/regex_parser",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "moonbitlang/core/test",
+} for "wbtest"
+
+import {
+  "hackwaly/lazy-tdfa" @regex,
+} for "test"

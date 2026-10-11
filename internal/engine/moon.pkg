@@ -1,0 +1,17 @@
+import {
+  "moonbitlang/core/builtin",
+  "moonbitlang/core/hashmap",
+  "moonbitlang/core/debug",
+  "hackwaly/lazy-tdfa/internal/engine/shared_types",
+  "hackwaly/lazy-tdfa/internal/engine/ast",
+  "hackwaly/lazy-tdfa/internal/engine/symbol_map",
+}
+
+import {
+  "moonbitlang/core/test",
+} for "wbtest"
+
+import {
+  "moonbitlang/core/test",
+  "hackwaly/lazy-tdfa/internal/engine" @regex_engine,
+} for "test"
