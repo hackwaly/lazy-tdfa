@@ -40,114 +40,148 @@ fn Regex::width(self : Regex) -> Int {
 }
 
 ///|
-fn Regex::stabilize(self : Regex, key : TaggedKey) -> Int {
-  self.cache.get_or_init(key, () => {
-    let index = self.states.length()
-    self.states.push(key)
-    let width = self.width()
-    let required = (index + 1) * width
-    if required > self.next.length() {
-      let size = Int::max(self.next.length() * 2, Int::max(required, width * 4))
-      let next = FixedArray::make(size, -1)
-      self.next.blit_to(next, len=self.next.length())
-      let actions = FixedArray::make(size, 0)
-      self.actions.blit_to(actions, len=self.actions.length())
-      self.next = next
-      self.actions = actions
-    }
-    let terminal = key.threads.is_empty() || key.threads[0].pc == 0
-    if terminal {
-      -index - 2
-    } else {
-      index * width
-    }
-  })
+// Clearing the DFA must preserve registers: the transition being built may
+// still refer to values written before the flush. State IDs and start rows,
+// unlike register IDs, become invalid and must all be discarded together.
+fn Regex::flush_cache(self : Regex) -> Unit {
+  self.cache.clear()
+  self.states.clear()
+  self.starts.fill(-1)
+  self.next.fill(-1)
+  self.actions.fill(0)
+  self.cache_words = 0
 }
 
 ///|
-fn Regex::start_state(self : Regex, prev : Category) -> Int {
-  for (cat, state) in self.starts {
-    if cat == prev {
-      return state
-    }
+fn Regex::insert_state(self : Regex, key : FixedArray[Int]) -> Int {
+  let index = self.states.length()
+  self.states.push(key)
+  let width = self.width()
+  let required = (index + 1) * width
+  if required > self.next.length() {
+    let size = Int::max(self.next.length() * 2, Int::max(required, width * 4))
+    self.next = FixedArray::make_and_blit(
+      self.next,
+      allocate_len=size,
+      init=-1,
+      len=self.next.length(),
+    )
+    self.actions = FixedArray::make_and_blit(
+      self.actions,
+      allocate_len=size,
+      init=0,
+      len=self.actions.length(),
+    )
   }
-  let state = self.stabilize({
-    prev,
-    threads: [
-      {
-        pc: self.start,
-        tags: ReadOnlyArray::from_array(
-          Array::make(self.groups.length() * 2, -1),
-        ),
-      },
-    ],
-  })
-  self.starts.push((prev, state))
+  let state = if key.length() == 1 || key[1] == 0 {
+    -index - 2
+  } else {
+    index * width
+  }
+  self.cache.set(key, state)
+  self.cache_words += key.length() + 2 * width
   state
 }
 
 ///|
-// Epsilon closure is ordered DFS, with generation-stamped PC deduplication.
-// Histories store register identities, never concrete input offsets.
-fn Regex::build_edge(self : Regex, base : Int, symbol : Int) -> Unit {
-  let key = self.states[base / self.width()]
-  let next_cat = if symbol == self.repr.length() {
+fn Regex::start_state(self : Regex, context : Int) -> Int {
+  let cached = self.starts[context]
+  if cached != -1 {
+    return cached
+  }
+  let key = FixedArray::make(2 + self.groups.length() * 2, -1)
+  key[0] = context
+  key[1] = self.start
+  let state = match self.cache.get(key) {
+    Some(state) => state
+    None => {
+      if self.cache_words + key.length() + 2 * self.width() > self.cache_budget {
+        self.flush_cache()
+      }
+      self.insert_state(key)
+    }
+  }
+  self.starts[context] = state
+  state
+}
+
+///|
+// Ordered DFS closure and target deduplication keep the first path to each
+// PC. Surviving tags retain their register identities across transitions.
+fn Regex::build_edge(self : Regex, base : Int, symbol : Int) -> Int {
+  let width = self.width()
+  let key = self.states[base / width]
+  let ntags = self.groups.length() * 2
+  let stride = ntags + 1
+  let count = (key.length() - 1) / stride
+  let at_end = symbol == self.repr.length()
+  let next_cat = if at_end {
     Category::inexistant()
   } else {
     self.categories[symbol]
   }
+  let prev_cat = self.contexts[key[0]]
   self.generation += 1
   if self.generation == 0 {
     self.seen.fill(0)
+    self.targeted.fill(0)
     self.generation = 1
   }
   let generation = self.generation
-  let stack : Array[TaggedThread] = []
-  for i = key.threads.length() - 1; i >= 0; i = i - 1 {
-    stack.push(key.threads[i])
+  let nodes = self.nodes
+  let seen = self.seen
+  let targeted = self.targeted
+  let stack : Array[(Int, FixedArray[Int])] = []
+  let pcs : Array[Int] = []
+  let histories : Array[FixedArray[Int]] = []
+  for i = count - 1; i >= 0; i = i - 1 {
+    let row = 1 + i * stride
+    let tags = FixedArray::make(ntags, -1)
+    key.blit_to(tags, len=ntags, src_offset=row + 1)
+    stack.push((key[row], tags))
   }
-  let frontier : Array[TaggedThread] = []
-  while stack.pop() is Some(thread) {
-    if self.seen[thread.pc] == generation {
+  while stack.pop() is Some((pc, tags)) {
+    if seen[pc] == generation {
       continue
     }
-    self.seen[thread.pc] = generation
-    match self.nodes[thread.pc] {
+    seen[pc] = generation
+    match nodes[pc] {
       Accept => {
-        frontier.push(thread)
-        // Lower-priority paths can never beat this accepted candidate.
+        pcs.push(pc)
+        histories.push(tags)
+        // An accepted candidate remains the lowest-priority surviving row.
         break
       }
       Chr(chars, next) =>
-        if symbol < self.repr.length() && chars.contains(symbol) {
-          frontier.push({ pc: next, tags: thread.tags, })
+        if !at_end && targeted[next] != generation && chars.contains(symbol) {
+          targeted[next] = generation
+          pcs.push(next)
+          histories.push(tags)
         }
       Split(alts) =>
         for i = alts.length() - 1; i >= 0; i = i - 1 {
-          stack.push({ pc: alts[i], tags: thread.tags, })
+          stack.push((alts[i], tags))
         }
       Assert(a, next) =>
-        if tagged_assertion(a, key.prev, next_cat) {
-          stack.push({ pc: next, tags: thread.tags, })
+        if tagged_assertion(a, prev_cat, next_cat) {
+          stack.push((next, tags))
         }
       Tag(tag, next) => {
-        let tags = Array::makei(thread.tags.length(), i => thread.tags[i])
+        let tags = tags.copy()
         tags[tag] = -2 // SET to current cursor on this edge.
-        stack.push({ pc: next, tags: ReadOnlyArray::from_array(tags), })
+        stack.push((next, tags))
       }
     }
   }
-  // Register identities are stable within the lazy automaton. A transition
-  // writes all tags set by its epsilon closure to one fresh register, because
-  // they refer to the same input cursor.
+  // All tags set by this closure name the same cursor. Allocate the lowest
+  // register not read by any surviving row, including an accepted candidate.
   let used = FixedArray::make(self.max_registers + 1, false)
   let mut needs_write = false
-  for thread in frontier {
-    for source in thread.tags {
+  for tags in histories {
+    for source in tags {
       if source == -2 {
         needs_write = true
-      }
-      if source >= 0 {
+      } else if source >= 0 {
         used[source] = true
       }
     }
@@ -159,20 +193,32 @@ fn Regex::build_edge(self : Regex, base : Int, symbol : Int) -> Unit {
     }
     self.max_registers = Int::max(self.max_registers, slot + 1)
   }
-  let threads = frontier.map(thread => {
-    let tags = if thread.tags.any(source => source == -2) {
-      thread.tags.map(source => if source == -2 { slot } else { source })
-    } else {
-      thread.tags
+  self.built_action = if needs_write { slot + 1 } else { 0 }
+  let dest = FixedArray::make(1 + pcs.length() * stride, -1)
+  dest[0] = if at_end { 0 } else { self.symbol_contexts[symbol] }
+  for i, pc in pcs {
+    let row = 1 + i * stride
+    dest[row] = pc
+    for tag, source in histories[i] {
+      dest[row + 1 + tag] = if source == -2 { slot } else { source }
     }
-    { pc: thread.pc, tags, }
-  })
-  let next = self.stabilize({
-    prev: next_cat,
-    threads: ReadOnlyArray::from_array(threads),
-  })
-  let edge = base + symbol
-  self.next[edge] = next
-  // Physical register zero is a disposable sink; real register r is r + 1.
-  self.actions[edge] = if needs_write { slot + 1 } else { 0 }
+  }
+  let mut flushed = false
+  let target = match self.cache.get(dest) {
+    Some(state) => state
+    None => {
+      if self.cache_words + dest.length() + 2 * width > self.cache_budget &&
+        !self.states.is_empty() {
+        self.flush_cache()
+        flushed = true
+      }
+      self.insert_state(dest)
+    }
+  }
+  if !flushed {
+    let edge = base + symbol
+    self.next[edge] = target
+    self.actions[edge] = self.built_action
+  }
+  target
 }

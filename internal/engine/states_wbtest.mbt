@@ -64,9 +64,83 @@ test "closure generations reset before reusing the zero stamp" {
   ignore(re.execute("ab", 0))
   re.generation = -1
   re.seen.fill(1)
+  re.targeted.fill(1)
   @debug.debug_inspect(
     re.execute("ac", 0).map(m => m.group(0)),
     content="Some(Some((0, 2)))",
   )
   @test.assert_eq(re.generation > 0, true)
+}
+
+///|
+test "tiny cache survives flushes during scanning and at EOF" {
+  let a = char(RecharSet::char('a'))
+  let pattern = seq([
+    start_of_input,
+    capture(quantifier(a, { min: 1, max: None, mode: Greedy, })),
+    char(RecharSet::char('b')),
+    end_of_input,
+  ])
+  let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
+  for input in ["ab", "aaaaab", "b", "aa", "ab", ""] {
+    let expected = compile(profile=test_profile, pattern).execute(input, 0)
+    let actual = re.execute(input, 0)
+    for group in 0..<2 {
+      @test.assert_eq(
+        actual.map(m => m.group(group)),
+        expected.map(m => m.group(group)),
+      )
+    }
+    // One key may itself exceed the soft budget. With a budget of one,
+    // every newly inserted key replaces the previous one.
+    @test.assert_eq(re.states.length(), 1)
+  }
+}
+
+///|
+test "cache flush preserves accepted candidates and view-relative captures" {
+  let a = char(RecharSet::char('a'))
+  let pattern = alt([capture(seq([a, char(RecharSet::char('b'))])), capture(a)])
+  let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
+  let view = "--xa!++"[2:5]
+  guard re.execute(view, 0) is Some(saved) else { fail("missing candidate") }
+  @test.assert_eq(saved.group(0), Some((1, 2)))
+  @test.assert_eq(saved.group(1), None)
+  @test.assert_eq(saved.group(2), Some((1, 2)))
+  ignore(re.execute("ab", 0))
+  @test.assert_eq(saved.group(2), Some((1, 2)))
+  @test.assert_eq(re.execute(view, 2).map(m => m.group(0)), None)
+}
+
+///|
+test "flat kernels keep the first history for duplicate targets" {
+  let a = char(RecharSet::char('a'))
+  let pattern = seq([
+    start_of_input,
+    alt([capture(a), capture(a)]),
+    end_of_input,
+  ])
+  let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
+  guard re.execute("a", 0) is Some(result) else { fail("missing match") }
+  @test.assert_eq(result.group(1), Some((0, 1)))
+  @test.assert_eq(result.group(2), None)
+}
+
+///|
+test "cache flush preserves greedy nullable final empty captures" {
+  let a = char(RecharSet::char('a'))
+  let optional = quantifier(a, { min: 0, max: Some(1), mode: Greedy, })
+  let pattern = seq([
+    start_of_input,
+    quantifier(capture(optional), { min: 0, max: None, mode: Greedy, }),
+    char(RecharSet::char('b')),
+    end_of_input,
+  ])
+  let re = compile_with_cache_budget(profile=test_profile, pattern, 1)
+  for n in 0..<12 {
+    guard re.execute("a".repeat(n) + "b", 0) is Some(result) else {
+      fail("missing match")
+    }
+    @test.assert_eq(result.group(1), Some((n, n)))
+  }
 }

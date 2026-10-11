@@ -17,6 +17,16 @@
 ///
 /// Uses ordered First semantics for alternatives and search attempts.
 pub fn compile(profile~ : Profile, ast : Pattern) -> Regex {
+  compile_with_cache_budget(profile~, ast, DEFAULT_CACHE_WORDS)
+}
+
+///|
+fn compile_with_cache_budget(
+  profile~ : Profile,
+  ast : Pattern,
+  cache_budget : Int,
+) -> Regex {
+  guard cache_budget > 0 else { panic() }
   let groups : Array[String?] = [None]
   fn number(ast : Pattern) -> TaggedPattern {
     match ast.desc {
@@ -175,21 +185,39 @@ pub fn compile(profile~ : Profile, ast : Pattern) -> Regex {
     nodes[search] = Split([captured, advance])
     search
   }
+  let categories = repr.map(profile.category)
+  let contexts : Array[Category] = [Category::inexistant()]
+  let symbol_contexts = categories.map(cat => {
+    match contexts.search(cat) {
+      Some(index) => index
+      None => {
+        let index = contexts.length()
+        contexts.push(cat)
+        index
+      }
+    }
+  })
   {
     groups: ReadOnlyArray::from_array(groups),
     nodes: ReadOnlyArray::from_array(nodes),
     start,
     symbols,
     repr,
-    categories: repr.map(profile.category),
-    starts: [],
+    categories,
+    contexts: ReadOnlyArray::from_array(contexts),
+    symbol_contexts,
+    starts: FixedArray::make(contexts.length(), -1),
     cache: HashMap([]),
     states: [],
     next: [],
     actions: [],
     registers: FixedArray::make(8, -1),
     max_registers: 0,
+    built_action: 0,
+    cache_words: 0,
+    cache_budget,
     seen: FixedArray::make(nodes.length(), 0),
+    targeted: FixedArray::make(nodes.length(), 0),
     generation: 0,
   }
 }

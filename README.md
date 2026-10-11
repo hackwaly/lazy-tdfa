@@ -12,3 +12,21 @@ moon info
 moon fmt
 moon test --target native,js,wasm-gc
 ```
+
+## Optimizations
+
+The scanner processes EOF outside the hot character loop and caches invariant
+lookups locally. Lazy DFA states use flat Int-array keys with interned category
+IDs and first-priority target deduplication. A soft cache budget of `1 << 22`
+Int cells counts state keys and transition rows. When a new state exceeds the
+budget, the DFA cache is cleared, start IDs invalidated, and live register
+values preserved so the current match can continue. The budget is internal,
+not a promise about whole-process RSS; transient allocations and one oversized
+state are not bounded by it.
+
+Greedy nullable repeats still retain their final empty capture: `^(a?)*b$`
+on `aab` captures the empty string in group 1. This deliberately preserves the
+core baseline used for the extraction, rather than adopting the different
+nullable capture behavior observed in bobzhang/tdfa.
+
+See [engine design](internal/engine/README.md) for invariants and test history.

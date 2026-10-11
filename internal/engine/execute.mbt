@@ -47,56 +47,71 @@ pub fn Regex::execute(
   last_index : Int,
 ) -> MatchResult? {
   guard last_index >= 0 && last_index <= input.length() else { panic() }
-  let prev = if last_index == 0 {
-    Category::inexistant()
+  let symbols = self.symbols
+  let context = if last_index == 0 {
+    0
   } else {
-    self.categories[self.symbols.map(input.unsafe_get(last_index - 1).to_int())]
+    self.symbol_contexts[symbols.map(input.unsafe_get(last_index - 1).to_int())]
   }
-  let mut state = self.start_state(prev)
+  let mut base = self.start_state(context)
   let mut next = self.next
   let mut actions = self.actions
   let mut registers = self.registers
   let data = input.data()
-  let mut pos = input.start_offset() + last_index
-  let end = input.start_offset() + input.length()
-  while state >= 0 {
-    let symbol = if pos < end {
-      self.symbols.map(data.unsafe_get(pos).to_int())
-    } else {
-      self.repr.length()
-    }
-    let edge = state + symbol
+  let shift = input.start_offset()
+  let mut pos = shift + last_index
+  let end = shift + input.length()
+  let mut stop = -1
+  while pos < end {
+    let symbol = symbols.map(data.unsafe_get(pos).to_int())
+    let edge = base + symbol
     let mut target = next.unsafe_get(edge)
-    if target == -1 {
-      self.build_edge(state, symbol)
-      self.ensure_registers()
-      next = self.next
-      actions = self.actions
-      registers = self.registers
-      target = next.unsafe_get(edge)
-    }
-    // The transition action is either zero (no tag writes) or a register
-    // index containing the current input cursor.
-    registers.unsafe_set(actions.unsafe_get(edge), pos)
-    state = target
-    if state < 0 {
+    if target < 0 {
+      if target == -1 {
+        target = self.build_edge(base, symbol)
+        self.ensure_registers()
+        next = self.next
+        actions = self.actions
+        registers = self.registers
+        registers.unsafe_set(self.built_action, pos)
+        if target >= 0 {
+          base = target
+          pos += 1
+          continue
+        }
+      } else {
+        registers.unsafe_set(actions.unsafe_get(edge), pos)
+      }
+      stop = target
       break
     }
-    // EOF closure cannot leave a character-consuming thread alive.
-    guard pos < end else { panic() }
+    registers.unsafe_set(actions.unsafe_get(edge), pos)
+    base = target
     pos += 1
   }
-  let key = self.states[-state - 2]
-  if key.threads.is_empty() {
+  if stop == -1 {
+    let edge = base + self.repr.length()
+    stop = next.unsafe_get(edge)
+    if stop == -1 {
+      stop = self.build_edge(base, self.repr.length())
+      self.ensure_registers()
+      registers = self.registers
+      registers.unsafe_set(self.built_action, pos)
+    } else {
+      registers.unsafe_set(actions.unsafe_get(edge), pos)
+    }
+  }
+  // The EOF closure has no consuming rows and always returns a terminal ID.
+  let key = self.states[-stop - 2]
+  if key.length() == 1 {
     None
   } else {
-    let shift = input.start_offset()
-    let tags = key.threads[0].tags
-    let result = Array::make(tags.length(), -1)
-    for i = 0; i < tags.length(); i = i + 1 {
-      let reg = tags[i]
+    let ntags = self.groups.length() * 2
+    let result = Array::make(ntags, -1)
+    for tag in 0..<ntags {
+      let reg = key[2 + tag]
       if reg >= 0 {
-        result[i] = registers[reg + 1] - shift
+        result[tag] = registers[reg + 1] - shift
       }
     }
     Some(MatchResult(result))

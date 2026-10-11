@@ -32,17 +32,9 @@ priv enum TaggedNode {
 }
 
 ///|
-priv struct TaggedThread {
-  pc : Int
-  // -1 is unset; other values name registers, never input offsets.
-  tags : ReadOnlyArray[Int]
-} derive(Eq, Hash)
-
-///|
-priv struct TaggedKey {
-  prev : Category
-  threads : ReadOnlyArray[TaggedThread]
-} derive(Eq, Hash)
+// The lazy cache budget counts Int cells in state keys and transition rows.
+// It excludes the NFA, transient closure work and allocator overhead.
+const DEFAULT_CACHE_WORDS : Int = 1 << 22
 
 ///|
 struct Regex {
@@ -52,9 +44,15 @@ struct Regex {
   symbols : @symbol_map.Table
   repr : ReadOnlyArray[Rechar]
   categories : ReadOnlyArray[Category]
-  starts : Array[(Category, Int)]
-  cache : @hashmap.HashMap[TaggedKey, Int]
-  states : Array[TaggedKey]
+  // Context IDs make the complete state key a flat Int array. Context zero
+  // denotes outside the input; all other IDs name character categories.
+  contexts : ReadOnlyArray[Category]
+  symbol_contexts : ReadOnlyArray[Int]
+  starts : FixedArray[Int]
+  // key[0] is the context ID, followed by rows of [pc, tag0, tag1, ...].
+  // Tags name logical registers (-1 is absent), never concrete input offsets.
+  cache : @hashmap.HashMap[FixedArray[Int], Int]
+  states : Array[FixedArray[Int]]
   // State rows include one EOF column. -1 means an uncomputed edge;
   // nonnegative targets are row bases, and -index-2 denotes a terminal state.
   mut next : FixedArray[Int]
@@ -62,7 +60,13 @@ struct Regex {
   mut actions : FixedArray[Int]
   mut registers : FixedArray[Int]
   mut max_registers : Int
+  // A cache flush invalidates the source row during build_edge. Return its
+  // destination directly and keep its action here instead of reloading it.
+  mut built_action : Int
+  mut cache_words : Int
+  cache_budget : Int
   seen : FixedArray[Int]
+  targeted : FixedArray[Int]
   mut generation : Int
 }
 
